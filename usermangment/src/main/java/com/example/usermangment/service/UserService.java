@@ -14,6 +14,11 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
 import com.example.usermangment.dto.UserStatsDto;
 import com.example.usermangment.dto.ChangePasswordRequest;
+import com.example.usermangment.repository.EmailVerificationTokenRepository;
+import org.springframework.transaction.annotation.Transactional;
+
+
+
 import org.springframework.security.authentication.BadCredentialsException;
 import java.util.List;
 @Service
@@ -22,13 +27,19 @@ public class UserService {
     private final UserRepository repo;
     private final CompanyRepository companyRepo;
     private final PasswordEncoder encoder;
+    private final EmailVerificationTokenRepository tokenRepo;
 
 
-    public UserService(UserRepository repo, CompanyRepository companyRepo, PasswordEncoder encoder) {
+    public UserService(UserRepository repo,
+                       CompanyRepository companyRepo,
+                       PasswordEncoder encoder,
+                       EmailVerificationTokenRepository tokenRepo) {
         this.repo = repo;
         this.companyRepo = companyRepo;
         this.encoder = encoder;
+        this.tokenRepo = tokenRepo;
     }
+
 
     // ✅ DTO safe (company + role string)
     public UserDto toDtoSafe(User u) {
@@ -183,9 +194,9 @@ public class UserService {
 
 
     // ✅ DELETE tenant-aware (ADMIN: même company, SUPER_ADMIN: tout)
+    @Transactional
     public void deleteForTenant(Long id, User current) {
 
-        // 1) USER interdit
         if (current.getRole() == Role.USER) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "forbidden");
         }
@@ -193,29 +204,35 @@ public class UserService {
         User target = repo.findById(id)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "user not found"));
 
-        // 2) Personne ne peut se supprimer soi-même
         if (target.getId().equals(current.getId())) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "cannot delete yourself");
         }
 
-        // 3) ADMIN règles
         if (current.getRole() == Role.ADMIN) {
 
-            // ADMIN ne peut pas supprimer SUPER_ADMIN
             if (target.getRole() == Role.SUPER_ADMIN) {
                 throw new ResponseStatusException(HttpStatus.FORBIDDEN, "cannot delete SUPER_ADMIN");
             }
 
-            // ADMIN : même company obligatoire
             if (current.getCompany() == null || target.getCompany() == null
                     || !current.getCompany().getId().equals(target.getCompany().getId())) {
                 throw new ResponseStatusException(HttpStatus.FORBIDDEN, "not your company");
             }
         }
 
-        // 4) SUPER_ADMIN peut tout (sauf lui-même déjà bloqué)
+        // ✅ 1) supprimer les tokens liés à ce user (FK)
+        tokenRepo.deleteByUser_Id(id);
+
+        // ✅ 2) (si tu as des relations qui peuvent bloquer, ex: roles ManyToMany)
+        // Si ton User a seulement "Role role" (enum) => tu peux ignorer.
+        // Si tu as "Set<RoleEntity> roles" ManyToMany => il faut clear avant delete.
+        // Exemple (si présent) :
+        // if (target.getRoles() != null) target.getRoles().clear();
+
+        // ✅ 3) supprimer le user
         repo.delete(target);
     }
+
 
 
 

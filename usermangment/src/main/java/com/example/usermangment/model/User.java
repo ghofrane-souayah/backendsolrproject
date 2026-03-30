@@ -22,7 +22,6 @@ public class User {
 
     private boolean enabled = true;
 
-    // ✅ user appartient à une company
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "company_id", nullable = false)
     private Company company;

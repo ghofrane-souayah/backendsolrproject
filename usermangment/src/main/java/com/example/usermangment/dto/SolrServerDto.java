@@ -4,6 +4,7 @@ import java.util.List;
 
 public class SolrServerDto {
 
+    private Long id;                // ✅ NEW
     private String name;
     private String host;
     private int port;
@@ -21,6 +22,9 @@ public class SolrServerDto {
     private String error;
 
     public SolrServerDto() {}
+
+    public Long getId() { return id; }
+    public void setId(Long id) { this.id = id; }
 
     public String getName() { return name; }
     public void setName(String name) { this.name = name; }
@@ -47,9 +51,7 @@ public class SolrServerDto {
     public void setTotalDocs(long totalDocs) { this.totalDocs = totalDocs; }
 
     public long getTotalSizeInBytes() { return totalSizeInBytes; }
-    public void setTotalSizeInBytes(long totalSizeInBytes) {
-        this.totalSizeInBytes = totalSizeInBytes;
-    }
+    public void setTotalSizeInBytes(long totalSizeInBytes) { this.totalSizeInBytes = totalSizeInBytes; }
 
     public List<String> getAlerts() { return alerts; }
     public void setAlerts(List<String> alerts) { this.alerts = alerts; }

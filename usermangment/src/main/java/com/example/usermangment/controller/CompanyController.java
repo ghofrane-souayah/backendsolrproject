@@ -1,10 +1,11 @@
 package com.example.usermangment.controller;
 
 import com.example.usermangment.dto.CompanyDto;
-import com.example.usermangment.model.Company;
 import com.example.usermangment.model.User;
 import com.example.usermangment.repository.CompanyRepository;
 import com.example.usermangment.repository.UserRepository;
+import com.example.usermangment.service.CompanyService;
+import com.example.usermangment.dto.CreateCompanyRequest;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -21,28 +22,32 @@ public class CompanyController {
 
     private final CompanyRepository companyRepository;
     private final UserRepository userRepository;
+    private final CompanyService companyService; // ✅ IMPORTANT
 
+    // ✅ Constructor injection
     public CompanyController(CompanyRepository companyRepository,
-                             UserRepository userRepository) {
+                             UserRepository userRepository,
+                             CompanyService companyService) {
         this.companyRepository = companyRepository;
         this.userRepository = userRepository;
+        this.companyService = companyService;
     }
 
-    // 🔹 SUPER_ADMIN → voir toutes les companies
+    // =========================
+    // GET ALL (SUPER_ADMIN)
+    // =========================
     @GetMapping
     @PreAuthorize("hasRole('SUPER_ADMIN')")
     public List<CompanyDto> getAllCompanies() {
         return companyRepository.findAll()
                 .stream()
-                .map(c -> new CompanyDto(
-                        c.getId(),
-                        c.getName(),
-                        c.getCode()
-                ))
+                .map(c -> new CompanyDto(c.getId(), c.getName(), c.getCode()))
                 .toList();
     }
 
-    // 🔹 ADMIN / SUPER_ADMIN → voir sa company
+    // =========================
+    // GET /me
+    // =========================
     @GetMapping("/me")
     @PreAuthorize("hasRole('ADMIN') or hasRole('SUPER_ADMIN')")
     public CompanyDto myCompany(Authentication authentication) {
@@ -50,16 +55,23 @@ public class CompanyController {
         User user = userRepository.findByEmail(authentication.getName())
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
 
-        Company company = user.getCompany();
-
-        if (company == null) {
+        if (user.getCompany() == null) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "No company assigned");
         }
 
         return new CompanyDto(
-                company.getId(),
-                company.getName(),
-                company.getCode()
+                user.getCompany().getId(),
+                user.getCompany().getName(),
+                user.getCompany().getCode()
         );
+    }
+
+    // =========================
+    // POST -> use Service
+    // =========================
+    @PostMapping
+    @PreAuthorize("hasRole('SUPER_ADMIN')")
+    public CompanyDto create(@RequestBody CreateCompanyRequest req) {
+        return companyService.create(req);
     }
 }

@@ -1,59 +1,60 @@
 package com.example.usermangment.service;
-// Ajoute ces imports en haut
-import com.example.usermangment.dto.SolrFieldDto;
-import com.example.usermangment.dto.SolrFieldTypeDto;
-import com.example.usermangment.dto.SolrSchemaFieldsResponse;
-import com.example.usermangment.dto.SolrSchemaTypesResponse;
 
 import com.example.usermangment.config.SolrMonitoringProperties;
-import com.example.usermangment.dto.SolrCoreDto;
-import com.example.usermangment.dto.SolrHealthDto;
-import com.example.usermangment.dto.SolrMonitoringResponse;
-import com.example.usermangment.dto.SolrServerDetailsDto;
-import com.example.usermangment.dto.SolrServerDto;
+import com.example.usermangment.dto.*;
+import com.example.usermangment.model.SolrInstance;
+import com.example.usermangment.repository.SolrInstanceRepository;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
-
+import org.springframework.web.server.ResponseStatusException;
 
 import java.net.URI;
 import java.time.Instant;
-import java.util.ArrayList;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
 @Service
 public class SolrMonitoringService {
 
     private final SolrMonitoringProperties props;
     private final RestTemplate restTemplate;
+    private final SolrInstanceRepository solrInstanceRepository;
     private final ObjectMapper mapper = new ObjectMapper();
 
     private static final int CPU_WARN = 80;
     private static final int MEM_WARN = 80;
 
-    public SolrMonitoringService(SolrMonitoringProperties props, RestTemplate restTemplate) {
+    public SolrMonitoringService(SolrMonitoringProperties props,
+                                 RestTemplate restTemplate,
+                                 SolrInstanceRepository solrInstanceRepository) {
         this.props = props;
         this.restTemplate = restTemplate;
+        this.solrInstanceRepository = solrInstanceRepository;
     }
 
-    // =========================================================
-    // ✅ 1) MONITORING CLUSTER
-    // =========================================================
-    // ============================
-// ✅ SCHEMA: FIELDS
-// ============================
-    public SolrSchemaFieldsResponse getSchemaFields(String serverName, String core) {
-        var node = props.getNodes().stream()
-                .filter(n -> n.getName().equalsIgnoreCase(serverName))
-                .findFirst()
-                .orElseThrow(() -> new IllegalArgumentException("Server not found: " + serverName));
+    public SolrServerDetailsDto getServerById(Long id) {
+        SolrInstance inst = solrInstanceRepository.findById(id)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
+                        "Server not found: " + id));
 
-        String url = node.getBaseUrl() + "/solr/" + core + "/schema/fields?wt=json";
+        SolrMonitoringProperties.Node node = new SolrMonitoringProperties.Node();
+        node.setName(inst.getName());
+        node.setBaseUrl("http://" + inst.getHost() + ":" + inst.getPort());
+
+        return buildServerDetails(node);
+    }
+
+    public SolrSchemaFieldsResponse getSchemaFieldsById(Long id, String core) {
+        SolrInstance inst = solrInstanceRepository.findById(id)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
+                        "Server not found: " + id));
+
+        String baseUrl = "http://" + inst.getHost() + ":" + inst.getPort();
+        String url = baseUrl + "/solr/" + core + "/schema/fields?wt=json";
+
         String jsonStr = restTemplate.getForObject(url, String.class);
-
         List<SolrFieldDto> fields = new ArrayList<>();
         if (jsonStr == null || jsonStr.isBlank()) return new SolrSchemaFieldsResponse(fields);
 
@@ -72,25 +73,20 @@ public class SolrMonitoringService {
                     ));
                 }
             }
-        } catch (Exception e) {
-            // si parsing échoue => on retourne liste vide
-        }
+        } catch (Exception ignored) {}
 
         return new SolrSchemaFieldsResponse(fields);
     }
 
-    // ============================
-// ✅ SCHEMA: TYPES (fieldTypes)
-// ============================
-    public SolrSchemaTypesResponse getSchemaTypes(String serverName, String core) {
-        var node = props.getNodes().stream()
-                .filter(n -> n.getName().equalsIgnoreCase(serverName))
-                .findFirst()
-                .orElseThrow(() -> new IllegalArgumentException("Server not found: " + serverName));
+    public SolrSchemaTypesResponse getSchemaTypesById(Long id, String core) {
+        SolrInstance inst = solrInstanceRepository.findById(id)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
+                        "Server not found: " + id));
 
-        String url = node.getBaseUrl() + "/solr/" + core + "/schema/fieldtypes?wt=json";
+        String baseUrl = "http://" + inst.getHost() + ":" + inst.getPort();
+        String url = baseUrl + "/solr/" + core + "/schema/fieldtypes?wt=json";
+
         String jsonStr = restTemplate.getForObject(url, String.class);
-
         List<SolrFieldTypeDto> types = new ArrayList<>();
         if (jsonStr == null || jsonStr.isBlank()) return new SolrSchemaTypesResponse(types);
 
@@ -99,26 +95,34 @@ public class SolrMonitoringService {
             JsonNode arr = root.path("fieldTypes");
             if (arr.isArray()) {
                 for (JsonNode t : arr) {
-                    String name = t.path("name").asText("");
-                    String clazz = t.path("class").asText(""); // Solr renvoie "class"
-                    types.add(new SolrFieldTypeDto(name, clazz));
+                    types.add(new SolrFieldTypeDto(
+                            t.path("name").asText(""),
+                            t.path("class").asText("")
+                    ));
                 }
             }
-        } catch (Exception e) {
-            // parsing fail => liste vide
-        }
+        } catch (Exception ignored) {}
 
         return new SolrSchemaTypesResponse(types);
     }
 
-    public SolrMonitoringResponse monitor() {
+    public SolrMonitoringResponse monitor(List<SolrInstance> instances) {
         List<SolrServerDto> nodes = new ArrayList<>();
+        if (instances == null) return new SolrMonitoringResponse(Instant.now(), nodes);
 
-        for (SolrMonitoringProperties.Node node : props.getNodes()) {
-            // on réutilise la même logique que "details"
+        for (SolrInstance inst : instances) {
+            if (inst == null) continue;
+
+            String baseUrl = "http://" + inst.getHost() + ":" + inst.getPort();
+
+            SolrMonitoringProperties.Node node = new SolrMonitoringProperties.Node();
+            node.setName(inst.getName());
+            node.setBaseUrl(baseUrl);
+
             SolrServerDetailsDto details = buildServerDetails(node);
 
             SolrServerDto dto = new SolrServerDto();
+            dto.setId(inst.getId());
             dto.setName(details.getName());
             dto.setHost(details.getHost());
             dto.setPort(details.getPort());
@@ -137,43 +141,10 @@ public class SolrMonitoringService {
         return new SolrMonitoringResponse(Instant.now(), nodes);
     }
 
-    // =========================================================
-    // ✅ 2) ETAPE 2 : DETAILS SERVEUR + HEALTH
-    // =========================================================
-    public SolrServerDetailsDto getServerByName(String name) {
-        SolrMonitoringProperties.Node node = props.getNodes().stream()
-                .filter(n -> n.getName().equalsIgnoreCase(name))
-                .findFirst()
-                .orElseThrow(() -> new IllegalArgumentException("Server not found: " + name));
-
-        return buildServerDetails(node);
-    }
-
-    public SolrHealthDto health(String name) {
-        SolrMonitoringProperties.Node node = props.getNodes().stream()
-                .filter(n -> n.getName().equalsIgnoreCase(name))
-                .findFirst()
-                .orElseThrow(() -> new IllegalArgumentException("Server not found: " + name));
-
-        long start = System.currentTimeMillis();
-        try {
-            String url = node.getBaseUrl() + "/solr/admin/info/system?wt=json";
-            restTemplate.getForObject(url, String.class);
-            long ms = System.currentTimeMillis() - start;
-            return new SolrHealthDto(node.getName(), "UP", ms);
-        } catch (Exception e) {
-            long ms = System.currentTimeMillis() - start;
-            return new SolrHealthDto(node.getName(), "DOWN", ms);
-        }
-    }
-
-    // =========================================================
-    // ✅ Build details (1 node)
-    // =========================================================
     private SolrServerDetailsDto buildServerDetails(SolrMonitoringProperties.Node node) {
         URI uri = URI.create(node.getBaseUrl());
 
-        String status;
+        String status = "DOWN";
         int cpu = 0;
         int mem = 0;
         List<SolrCoreDto> cores = List.of();
@@ -182,13 +153,62 @@ public class SolrMonitoringService {
         List<String> alerts = new ArrayList<>();
         String error = null;
 
-        try {
-            // 1) Ping
-            String pingUrl = node.getBaseUrl() + "/solr/admin/info/system?wt=json";
-            restTemplate.getForObject(pingUrl, String.class);
-            status = "UP";
+        String pingError = null;
+        boolean up = false;
 
-            // 2) CPU/Mem
+        // retry ping système
+        for (int i = 0; i < 3; i++) {
+            try {
+                String pingUrl = node.getBaseUrl() + "/solr/admin/info/system?wt=json";
+                String response = restTemplate.getForObject(pingUrl, String.class);
+
+                if (response != null && !response.isBlank()) {
+                    up = true;
+                    break;
+                }
+            } catch (Exception e) {
+                pingError = e.getMessage();
+                try {
+                    Thread.sleep(1000);
+                } catch (InterruptedException ie) {
+                    Thread.currentThread().interrupt();
+                    pingError = "Interrupted while checking Solr status";
+                    break;
+                }
+            }
+        }
+
+        if (!up) {
+            status = "DOWN";
+            alerts = new ArrayList<>();
+            alerts.add("NODE_DOWN");
+
+            String msg = pingError;
+            if (msg != null && msg.length() > 250) {
+                msg = msg.substring(0, 250);
+            }
+            error = msg;
+
+            return new SolrServerDetailsDto(
+                    node.getName(),
+                    node.getBaseUrl(),
+                    uri.getHost(),
+                    uri.getPort(),
+                    status,
+                    cpu,
+                    mem,
+                    cores,
+                    totalDocs,
+                    totalSize,
+                    alerts,
+                    error
+            );
+        }
+
+        status = "UP";
+        error = null;
+
+        try {
             String metricsUrl = node.getBaseUrl() + "/solr/admin/metrics?group=jvm&wt=json";
             String metricsJsonStr = restTemplate.getForObject(metricsUrl, String.class);
 
@@ -197,26 +217,26 @@ public class SolrMonitoringService {
                 cpu = extractCpuPercent(root);
                 mem = extractHeapPercent(root);
             }
+        } catch (Exception ignored) {
+            cpu = 0;
+            mem = 0;
+        }
 
-            // 3) Cores + totals
+        try {
             cores = fetchCores(node.getBaseUrl());
             for (SolrCoreDto c : cores) {
                 totalDocs += c.getNumDocs();
                 totalSize += c.getSizeInBytes();
             }
-
-            // 4) Alerts
-            if (cpu >= CPU_WARN) alerts.add("HIGH_CPU");
-            if (mem >= MEM_WARN) alerts.add("HIGH_MEMORY");
-            if (cores.isEmpty()) alerts.add("NO_CORES");
-
-        } catch (Exception e) {
-            status = "DOWN";
-            alerts = List.of("NODE_DOWN");
-            String msg = e.getMessage();
-            if (msg != null && msg.length() > 250) msg = msg.substring(0, 250);
-            error = msg;
+        } catch (Exception ignored) {
+            cores = List.of();
+            totalDocs = 0;
+            totalSize = 0;
         }
+
+        if (cpu >= CPU_WARN) alerts.add("HIGH_CPU");
+        if (mem >= MEM_WARN) alerts.add("HIGH_MEMORY");
+        if (cores.isEmpty()) alerts.add("NO_CORES");
 
         return new SolrServerDetailsDto(
                 node.getName(),
@@ -234,9 +254,6 @@ public class SolrMonitoringService {
         );
     }
 
-    // =========================================================
-    // ✅ CPU / Memory
-    // =========================================================
     private int extractCpuPercent(JsonNode root) {
         JsonNode solrJvm = root.path("metrics").path("solr.jvm");
         if (!solrJvm.isObject()) return 0;
@@ -247,7 +264,6 @@ public class SolrMonitoringService {
         double v = -1;
         if (sys.isNumber()) v = sys.asDouble();
         if (v <= 0 && proc.isNumber()) v = proc.asDouble();
-
         if (v < 0) return 0;
 
         double percent = v * 100.0;
@@ -276,9 +292,6 @@ public class SolrMonitoringService {
         return (int) Math.round(percent);
     }
 
-    // =========================================================
-    // ✅ Cores
-    // =========================================================
     private List<SolrCoreDto> fetchCores(String baseUrl) {
         try {
             String coresUrl = baseUrl + "/solr/admin/cores?action=STATUS&wt=json";
