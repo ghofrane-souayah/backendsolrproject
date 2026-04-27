@@ -1,12 +1,12 @@
 package com.example.usermangment.controller;
 
 import com.example.usermangment.dto.CompanyDto;
+import com.example.usermangment.dto.CreateCompanyRequest;
 import com.example.usermangment.model.User;
 import com.example.usermangment.repository.CompanyRepository;
 import com.example.usermangment.repository.UserRepository;
 import com.example.usermangment.service.CompanyService;
-import com.example.usermangment.dto.CreateCompanyRequest;
-
+import com.example.usermangment.service.NotificationService;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
@@ -22,20 +22,21 @@ public class CompanyController {
 
     private final CompanyRepository companyRepository;
     private final UserRepository userRepository;
-    private final CompanyService companyService; // ✅ IMPORTANT
+    private final CompanyService companyService;
+    private final NotificationService notificationService;
 
-    // ✅ Constructor injection
-    public CompanyController(CompanyRepository companyRepository,
-                             UserRepository userRepository,
-                             CompanyService companyService) {
+    public CompanyController(
+            CompanyRepository companyRepository,
+            UserRepository userRepository,
+            CompanyService companyService,
+            NotificationService notificationService
+    ) {
         this.companyRepository = companyRepository;
         this.userRepository = userRepository;
         this.companyService = companyService;
+        this.notificationService = notificationService;
     }
 
-    // =========================
-    // GET ALL (SUPER_ADMIN)
-    // =========================
     @GetMapping
     @PreAuthorize("hasRole('SUPER_ADMIN')")
     public List<CompanyDto> getAllCompanies() {
@@ -45,9 +46,13 @@ public class CompanyController {
                 .toList();
     }
 
-    // =========================
-    // GET /me
-    // =========================
+    @DeleteMapping("/{id}")
+    @PreAuthorize("hasRole('SUPER_ADMIN')")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void delete(@PathVariable Long id) {
+        companyService.delete(id);
+    }
+
     @GetMapping("/me")
     @PreAuthorize("hasRole('ADMIN') or hasRole('SUPER_ADMIN')")
     public CompanyDto myCompany(Authentication authentication) {
@@ -66,12 +71,30 @@ public class CompanyController {
         );
     }
 
-    // =========================
-    // POST -> use Service
-    // =========================
     @PostMapping
     @PreAuthorize("hasRole('SUPER_ADMIN')")
     public CompanyDto create(@RequestBody CreateCompanyRequest req) {
-        return companyService.create(req);
+        try {
+            CompanyDto result = companyService.create(req);
+
+            Long companyId = result.getId();
+
+            notificationService.createSuccess(
+                    "Company créée",
+                    "La company " + result.getName() + " a été créée avec succès.",
+                    "Dashboard",
+                    companyId
+            );
+
+            return result;
+        } catch (Exception e) {
+            notificationService.createError(
+                    "Échec création company",
+                    e.getMessage() != null ? e.getMessage() : "La création de la company a échoué.",
+                    "Dashboard",
+                    null
+            );
+            throw e;
+        }
     }
 }

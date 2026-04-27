@@ -1,54 +1,62 @@
 package com.example.usermangment.service;
 
 import com.example.usermangment.dto.CompanyDto;
+import com.example.usermangment.dto.CreateCompanyRequest;
 import com.example.usermangment.model.Company;
 import com.example.usermangment.repository.CompanyRepository;
-import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
-import org.springframework.web.server.ResponseStatusException;
-import com.example.usermangment.dto.CreateCompanyRequest;
+
 import java.util.UUID;
 
 @Service
 public class CompanyService {
 
-    private final CompanyRepository companyRepo;
+    private final CompanyRepository companyRepository;
+    private final NotificationService notificationService;
 
-    public CompanyService(CompanyRepository companyRepo) {
-        this.companyRepo = companyRepo;
+    public CompanyService(
+            CompanyRepository companyRepository,
+            NotificationService notificationService
+    ) {
+        this.companyRepository = companyRepository;
+        this.notificationService = notificationService;
     }
 
     public CompanyDto create(CreateCompanyRequest req) {
-        String name = req.getName() == null ? "" : req.getName().trim();
-        if (name.isBlank()) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "name is required");
-        }
+        Company company = new Company();
+        company.setName(req.getName());
+        company.setCode(generateCode(req.getName()));
 
-        if (companyRepo.existsByNameIgnoreCase(name)) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "company name already exists");
-        }
+        Company saved = companyRepository.save(company);
 
-        Company c = new Company();
-        c.setName(name);
-
-        // ✅ code unique généré
-        String code = generateUniqueCode();
-        c.setCode(code);
-
-        Company saved = companyRepo.save(c);
-        return toDto(saved);
+        return new CompanyDto(saved.getId(), saved.getName(), saved.getCode());
     }
 
-    private CompanyDto toDto(Company c) {
-        return new CompanyDto(c.getId(), c.getName(), c.getCode());
+    public void delete(Long id) {
+        Company company = companyRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("Company not found"));
+
+        // Supprime d'abord les notifications liées à cette compagnie
+        notificationService.deleteByCompanyId(id);
+
+        // Puis supprime la compagnie
+        companyRepository.delete(company);
     }
 
-    // ✅ génère un code unique en vérifiant la DB
-    private String generateUniqueCode() {
-        String code;
-        do {
-            code = "CMP-" + UUID.randomUUID().toString().substring(0, 8).toUpperCase();
-        } while (companyRepo.existsByCodeIgnoreCase(code));
-        return code;
+    private String generateCode(String name) {
+        String prefix = name == null || name.isBlank()
+                ? "CMP"
+                : name.trim()
+                .replaceAll("\\s+", "")
+                .substring(0, Math.min(3, name.trim().length()))
+                .toUpperCase();
+
+        String suffix = UUID.randomUUID()
+                .toString()
+                .replace("-", "")
+                .substring(0, 6)
+                .toUpperCase();
+
+        return prefix + "-" + suffix;
     }
 }

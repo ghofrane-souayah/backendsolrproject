@@ -2,6 +2,7 @@ package com.example.usermangment.model;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
+
 import java.time.LocalDateTime;
 
 @Entity
@@ -22,7 +23,7 @@ public class SolrInstance {
     private Integer port;
 
     @Column(length = 20)
-    private String status; // UP / DOWN
+    private String status; // UP / DOWN / DISABLED
 
     @Column(name = "instance_path", length = 500)
     private String instancePath;
@@ -36,6 +37,9 @@ public class SolrInstance {
     @Column(name = "created_at", updatable = false)
     private LocalDateTime createdAt;
 
+    @Column(name = "last_health_check_time")
+    private LocalDateTime lastHealthCheckTime;
+
     @JsonIgnore
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "company_id", nullable = false)
@@ -44,28 +48,95 @@ public class SolrInstance {
     public SolrInstance() {}
 
     @PrePersist
-    protected void onCreate() {
+    public void prePersist() {
         this.createdAt = LocalDateTime.now();
     }
 
-    public Long getId() { return id; }
-    public String getName() { return name; }
-    public String getHost() { return host; }
-    public Integer getPort() { return port; }
-    public String getStatus() { return status; }
-    public String getInstancePath() { return instancePath; }
-    public String getCorePath() { return corePath; }
-    public String getImagePath() { return imagePath; }
-    public LocalDateTime getCreatedAt() { return createdAt; }
-    public Company getCompany() { return company; }
+    public Long getId() {
+        return id;
+    }
 
-    public void setId(Long id) { this.id = id; }
-    public void setName(String name) { this.name = name; }
-    public void setHost(String host) { this.host = host; }
-    public void setPort(Integer port) { this.port = port; }
-    public void setStatus(String status) { this.status = status; }
-    public void setInstancePath(String instancePath) { this.instancePath = instancePath; }
-    public void setCorePath(String corePath) { this.corePath = corePath; }
-    public void setImagePath(String imagePath) { this.imagePath = imagePath; }
-    public void setCompany(Company company) { this.company = company; }
+    public String getName() {
+        return name;
+    }
+
+    public String getHost() {
+        return host;
+    }
+
+    public Integer getPort() {
+        return port;
+    }
+
+    public String getStatus() {
+        return status;
+    }
+
+    public String getInstancePath() {
+        return instancePath;
+    }
+
+    public String getCorePath() {
+        return corePath;
+    }
+
+    public String getImagePath() {
+        return imagePath;
+    }
+
+    public LocalDateTime getCreatedAt() {
+        return createdAt;
+    }
+
+    public LocalDateTime getLastHealthCheckTime() {
+        return lastHealthCheckTime;
+    }
+
+    public Company getCompany() {
+        return company;
+    }
+
+    public void setId(Long id) {
+        this.id = id;
+    }
+
+    public void setName(String name) {
+        this.name = name;
+    }
+
+    public void setHost(String host) {
+        this.host = host;
+    }
+
+    public void setPort(Integer port) {
+        this.port = port;
+    }
+
+    public void setStatus(String status) {
+        this.status = status;
+    }
+
+    public void setInstancePath(String instancePath) {
+        this.instancePath = instancePath;
+    }
+
+    public void setCorePath(String corePath) {
+        this.corePath = corePath;
+    }
+
+    public void setImagePath(String imagePath) {
+        this.imagePath = imagePath;
+    }
+
+    public void setCreatedAt(LocalDateTime createdAt) {
+        this.createdAt = createdAt;
+    }
+
+    public void setLastHealthCheckTime(LocalDateTime lastHealthCheckTime) {
+        this.lastHealthCheckTime = lastHealthCheckTime;
+    }
+
+    public void setCompany(Company company) {
+        this.company = company;
+    }
 }

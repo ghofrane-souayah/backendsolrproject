@@ -43,6 +43,7 @@ public class JwtAuthFilter extends OncePerRequestFilter {
         String path = request.getRequestURI();
         if (path != null && (path.startsWith("/api/auth/") || path.equals("/error"))) {
             filterChain.doFilter(request, response);
+
             return;
         }
 
@@ -85,9 +86,10 @@ public class JwtAuthFilter extends OncePerRequestFilter {
                 SecurityContextHolder.getContext().setAuthentication(authentication);
             }
 
-        } catch (Exception ignored) {
-            // token invalide -> anonymous
-        }
+        }  catch (Exception e) {
+        System.out.println("JWT ERROR: " + e.getMessage());
+        e.printStackTrace();
+    }
 
         filterChain.doFilter(request, response);
     }

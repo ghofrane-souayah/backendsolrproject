@@ -1,10 +1,11 @@
 package com.example.usermangment.dto;
 
+import java.time.LocalDateTime;
 import java.util.List;
 
 public class SolrServerDto {
 
-    private Long id;                // ✅ NEW
+    private Long id;
     private String name;
     private String host;
     private int port;
@@ -20,6 +21,8 @@ public class SolrServerDto {
 
     private List<String> alerts;
     private String error;
+
+    private LocalDateTime lastHealthCheckTime;
 
     public SolrServerDto() {}
 
@@ -58,4 +61,7 @@ public class SolrServerDto {
 
     public String getError() { return error; }
     public void setError(String error) { this.error = error; }
+
+    public LocalDateTime getLastHealthCheckTime() { return lastHealthCheckTime; }
+    public void setLastHealthCheckTime(LocalDateTime lastHealthCheckTime) { this.lastHealthCheckTime = lastHealthCheckTime; }
 }

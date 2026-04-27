@@ -36,8 +36,10 @@ public class SolrMonitoringService {
 
     public SolrServerDetailsDto getServerById(Long id) {
         SolrInstance inst = solrInstanceRepository.findById(id)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
-                        "Server not found: " + id));
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND,
+                        "Server not found: " + id
+                ));
 
         SolrMonitoringProperties.Node node = new SolrMonitoringProperties.Node();
         node.setName(inst.getName());
@@ -48,15 +50,19 @@ public class SolrMonitoringService {
 
     public SolrSchemaFieldsResponse getSchemaFieldsById(Long id, String core) {
         SolrInstance inst = solrInstanceRepository.findById(id)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
-                        "Server not found: " + id));
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND,
+                        "Server not found: " + id
+                ));
 
         String baseUrl = "http://" + inst.getHost() + ":" + inst.getPort();
         String url = baseUrl + "/solr/" + core + "/schema/fields?wt=json";
 
         String jsonStr = restTemplate.getForObject(url, String.class);
         List<SolrFieldDto> fields = new ArrayList<>();
-        if (jsonStr == null || jsonStr.isBlank()) return new SolrSchemaFieldsResponse(fields);
+        if (jsonStr == null || jsonStr.isBlank()) {
+            return new SolrSchemaFieldsResponse(fields);
+        }
 
         try {
             JsonNode root = mapper.readTree(jsonStr);
@@ -73,22 +79,27 @@ public class SolrMonitoringService {
                     ));
                 }
             }
-        } catch (Exception ignored) {}
+        } catch (Exception ignored) {
+        }
 
         return new SolrSchemaFieldsResponse(fields);
     }
 
     public SolrSchemaTypesResponse getSchemaTypesById(Long id, String core) {
         SolrInstance inst = solrInstanceRepository.findById(id)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
-                        "Server not found: " + id));
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND,
+                        "Server not found: " + id
+                ));
 
         String baseUrl = "http://" + inst.getHost() + ":" + inst.getPort();
         String url = baseUrl + "/solr/" + core + "/schema/fieldtypes?wt=json";
 
         String jsonStr = restTemplate.getForObject(url, String.class);
         List<SolrFieldTypeDto> types = new ArrayList<>();
-        if (jsonStr == null || jsonStr.isBlank()) return new SolrSchemaTypesResponse(types);
+        if (jsonStr == null || jsonStr.isBlank()) {
+            return new SolrSchemaTypesResponse(types);
+        }
 
         try {
             JsonNode root = mapper.readTree(jsonStr);
@@ -101,14 +112,17 @@ public class SolrMonitoringService {
                     ));
                 }
             }
-        } catch (Exception ignored) {}
+        } catch (Exception ignored) {
+        }
 
         return new SolrSchemaTypesResponse(types);
     }
 
     public SolrMonitoringResponse monitor(List<SolrInstance> instances) {
         List<SolrServerDto> nodes = new ArrayList<>();
-        if (instances == null) return new SolrMonitoringResponse(Instant.now(), nodes);
+        if (instances == null) {
+            return new SolrMonitoringResponse(Instant.now(), nodes);
+        }
 
         for (SolrInstance inst : instances) {
             if (inst == null) continue;
@@ -134,6 +148,7 @@ public class SolrMonitoringService {
             dto.setTotalSizeInBytes(details.getTotalSizeInBytes());
             dto.setAlerts(details.getAlerts());
             dto.setError(details.getError());
+            dto.setLastHealthCheckTime(inst.getLastHealthCheckTime());
 
             nodes.add(dto);
         }
@@ -153,34 +168,22 @@ public class SolrMonitoringService {
         List<String> alerts = new ArrayList<>();
         String error = null;
 
-        String pingError = null;
         boolean up = false;
+        String pingError = null;
 
-        // retry ping système
-        for (int i = 0; i < 3; i++) {
-            try {
-                String pingUrl = node.getBaseUrl() + "/solr/admin/info/system?wt=json";
-                String response = restTemplate.getForObject(pingUrl, String.class);
+        try {
+            String pingUrl = node.getBaseUrl() + "/solr/admin/info/system?wt=json";
+            String response = restTemplate.getForObject(pingUrl, String.class);
 
-                if (response != null && !response.isBlank()) {
-                    up = true;
-                    break;
-                }
-            } catch (Exception e) {
-                pingError = e.getMessage();
-                try {
-                    Thread.sleep(1000);
-                } catch (InterruptedException ie) {
-                    Thread.currentThread().interrupt();
-                    pingError = "Interrupted while checking Solr status";
-                    break;
-                }
+            if (response != null && !response.isBlank()) {
+                up = true;
             }
+        } catch (Exception e) {
+            pingError = e.getMessage();
         }
 
         if (!up) {
             status = "DOWN";
-            alerts = new ArrayList<>();
             alerts.add("NODE_DOWN");
 
             String msg = pingError;

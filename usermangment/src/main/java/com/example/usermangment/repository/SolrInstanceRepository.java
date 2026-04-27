@@ -15,7 +15,6 @@ public interface SolrInstanceRepository extends JpaRepository<SolrInstance, Long
     boolean existsByCompanyIdAndNameIgnoreCase(Long companyId, String name);
 
     boolean existsByCompanyIdAndHostAndPort(Long companyId, String host, Integer port);
-
-    // ✅ AJOUT
+    boolean existsByCompanyId(Long companyId);
     List<SolrInstance> findByStatusNotIgnoreCase(String status);
 }

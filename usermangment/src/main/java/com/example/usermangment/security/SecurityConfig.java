@@ -34,9 +34,10 @@ public class SecurityConfig {
                         .requestMatchers("/api/auth/**").permitAll()
                         .requestMatchers("/error").permitAll()
                         .requestMatchers("/api/docker-solr/**").permitAll()
-                        // ✅ puisque tu crées ROLE_USER / ROLE_ADMIN / ROLE_SUPER_ADMIN
+                        .requestMatchers("/api/notifications/**").permitAll()
+                        .requestMatchers("/api/reports/**").hasAnyRole("USER", "ADMIN", "SUPER_ADMIN")
                         .requestMatchers("/api/solr/**").hasAnyRole("USER", "ADMIN", "SUPER_ADMIN")
-
+                        .requestMatchers("/api/solr/cores/**").hasAnyRole( "ADMIN", "SUPER_ADMIN")
                         .anyRequest().authenticated()
                 )
                 .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class);

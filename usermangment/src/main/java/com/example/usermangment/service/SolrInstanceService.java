@@ -13,7 +13,8 @@ import com.example.usermangment.repository.SolrInstanceRepository;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
-
+import org.springframework.beans.factory.annotation.Autowired;
+import com.example.usermangment.service.SolrHealthService;
 import java.net.HttpURLConnection;
 import java.net.Socket;
 import java.net.URL;
@@ -24,7 +25,6 @@ import java.util.List;
 public class SolrInstanceService {
 
     private static final String DEFAULT_SOLR_IMAGE = "solr:9.10.1";
-
     private final SolrInstanceRepository solrRepo;
     private final CompanyRepository companyRepo;
 
@@ -492,9 +492,14 @@ public class SolrInstanceService {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Port already used on the server");
         }
 
+        String containerName = "solr-" + sanitizeDockerName(s.getName());
+        String image = DEFAULT_SOLR_IMAGE;
+
         try {
-            String containerName = "solr-" + sanitizeDockerName(s.getName());
-            String image = DEFAULT_SOLR_IMAGE;
+            // Nettoyer un ancien conteneur arrêté avec le même nom
+            runCommandIgnoreFailure(
+                    new ProcessBuilder("docker", "rm", "-f", containerName)
+            );
 
             runCommandOrThrow(
                     new ProcessBuilder(
@@ -507,7 +512,7 @@ public class SolrInstanceService {
                     "Failed to start Docker container"
             );
 
-            boolean ready = waitUntilSolrReady(s.getHost(), s.getPort(), 30, 2000);
+            boolean ready = waitUntilSolrReady(s.getHost(), s.getPort(), 20, 1000);
 
             if (!ready) {
                 s.setStatus("DOWN");
@@ -534,5 +539,20 @@ public class SolrInstanceService {
                     "Error while starting Solr instance: " + e.getMessage()
             );
         }
+
     }
-}
+    @Autowired
+    private SolrHealthService solrHealthService;
+
+    public void updateInstanceStatus(SolrInstance instance) {
+        boolean isUp = solrHealthService.isSolrHealthy(instance);
+
+        if (isUp) {
+            instance.setStatus("UP");
+        } else {
+            instance.setStatus("DOWN");
+        }
+    }
+
+
+    }
